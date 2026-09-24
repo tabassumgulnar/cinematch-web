@@ -1,0 +1,6 @@
+{
+  "name": "CineMatch - Movie Matcher for Friends",
+  "description": "Tinder-style movie matching app for groups and friends with real-time lobbies, preference filtering, synchronized swiping, and instant watch links.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

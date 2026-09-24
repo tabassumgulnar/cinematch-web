@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Authenticated user profile and preferences",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "User Gmail / email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Full name or Google profile display name"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Profile avatar URL"
+        },
+        "lastLogin": {
+          "type": "string",
+          "description": "ISO timestamp of last login"
+        }
+      },
+      "required": ["email", "displayName", "lastLogin"]
+    },
+    "Room": {
+      "title": "Watch Room",
+      "description": "Group movie swiping session and watch party state",
+      "type": "object",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "description": "Unique room code identifier"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last activity timestamp"
+        }
+      },
+      "required": ["roomId", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles indexed by authentication UID"
+    },
+    "/rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Live rooms for group swiping, matches and synced watch parties"
+    }
+  }
+}

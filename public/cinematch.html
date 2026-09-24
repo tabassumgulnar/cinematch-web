@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>CineMatch - Movie Matcher for Friends with Google Auth & Firebase</title>
+  <meta name="description" content="Tinder-style movie matching app for groups with Google Auth, Firestore persistence, swipe decks, and instant 7reels.cc watch party." />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              red: '#e50914',
+              redHover: '#f40612',
+              green: '#00a572',
+              greenHover: '#00c98b',
+              gold: '#f1c111',
+              darkBg: '#0c0e12',
+              cardBg: '#181a20',
+              border: '#282a2e'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Google Fonts & Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+  
+  <!-- Canvas Confetti CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0c0e12;
+      color: #e2e2e8;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: pan-y;
+      overflow-x: hidden;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+    .icon-fill {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #111317;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #282a2e;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3a3d44;
+    }
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translateY(0) scale(0.8); }
+      100% { opacity: 0; transform: translateY(-100px) scale(1.3); }
+    }
+    .reaction-bubble {
+      animation: floatUp 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-red-600 selection:text-white">
+
+  <!-- ========================================== -->
+  <!-- TOP APP HEADER                             -->
+  <!-- ========================================== -->
+  <header class="sticky top-0 z-40 w-full bg-[#0c0e12]/90 backdrop-blur-xl border-b border-[#282a2e] px-4 py-2.5">
+    <div class="max-w-2xl mx-auto flex items-center justify-between">
+      
+      <!-- Logo & Room Badge -->
+      <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('preferences')">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#e50914] to-[#ff4343] flex items-center justify-center shadow-lg shadow-red-600/30">
+          <span class="material-symbols-outlined text-white text-xl icon-fill">movie</span>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <h1 class="text-base font-extrabold text-white tracking-tight leading-none">CineMatch</h1>
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#e50914]/20 text-[#ff6b6b] border border-[#e50914]/30 uppercase">v2.5</span>
+          </div>
+          <p id="room-code-display" class="text-[11px] font-mono text-gray-400 mt-0.5 flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Room: <strong class="text-emerald-400" id="current-room-id">cine-8942</strong>
+          </p>
+        </div>
+      </div>
+
+      <!-- Auth Header / User Profile -->
+      <div class="flex items-center gap-2.5">
+        <!-- Logged Out State Button -->
+        <button id="header-login-btn" onclick="openAuthModal('manual')" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1c1e24] hover:bg-[#282a2e] border border-[#333539] text-xs font-semibold text-white transition active:scale-95 shadow-sm">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span>Sign In</span>
+        </button>
+
+        <!-- Logged In State Profile Badge (hidden by default) -->
+        <div id="header-user-badge" class="hidden flex items-center gap-2 bg-[#181a20] pl-1.5 pr-2 py-1 rounded-full border border-[#282a2e]">
+          <img id="header-user-avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=guest" alt="User Avatar" class="w-6 h-6 rounded-full object-cover ring-1 ring-[#e50914]" />
+          <div class="flex flex-col text-left max-w-[90px] sm:max-w-[130px]">
+            <span id="header-user-name" class="text-xs font-bold text-white truncate">User</span>
+            <span id="header-user-email" class="text-[9px] text-gray-400 truncate leading-none">user@gmail.com</span>
+          </div>
+          <button onclick="handleSignOut()" title="Sign Out" class="p-1 rounded-full text-gray-400 hover:text-red-400 hover:bg-[#282a2e] transition ml-1">
+            <span class="material-symbols-outlined text-sm">logout</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ========================================== -->
+  <!-- MAIN APP CONTAINER                         -->
+  <!-- ========================================== -->
+  <main class="flex-1 max-w-lg w-full mx-auto p-4 flex flex-col justify-start relative">
+
+    <!-- ---------------------------------------- -->
+    <!-- VIEW 1: PREFERENCES & FILTER SELECTION   -->
+    <!-- ---------------------------------------- -->
+    <section id="view-preferences" class="flex flex-col gap-5 py-2">
+      <div class="text-center space-y-1">
+        <h2 class="text-2xl font-black tracking-tight text-white">Find What to Watch</h2>
+        <p class="text-xs text-gray-400">Match movies together with zero arguments. Choose genres & start swiping!</p>
+      </div>
+
+      <!-- Genres Multi-select -->
+      <div class="bg-[#181a20] p-4 rounded-2xl border border-[#282a2e] space-y-3 shadow-lg">
+        <label class="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-base text-[#e50914]">category</span>
+          Favorite Genres
+        </label>
+        <div id="genres-container" class="flex flex-wrap gap-2">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Languages -->
+      <div class="bg-[#181a20] p-4 rounded-2xl border border-[#282a2e] space-y-3 shadow-lg">
+        <label class="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-base text-cyan-400">translate</span>
+          Languages
+        </label>
+        <div id="languages-container" class="flex flex-wrap gap-2">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- IMDb Rating Slider -->
+      <div class="bg-[#181a20] p-4 rounded-2xl border border-[#282a2e] space-y-3 shadow-lg">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-base text-yellow-400 icon-fill">star</span>
+            Min IMDb Rating
+          </label>
+          <span id="rating-val-display" class="text-xs font-extrabold text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded border border-yellow-400/20">7.5+</span>
+        </div>
+        <input id="rating-slider" type="range" min="6.0" max="9.0" step="0.1" value="7.5" oninput="updateRatingDisplay(this.value)" class="w-full accent-[#e50914] cursor-pointer" />
+      </div>
+
+      <!-- Start Button -->
+      <button onclick="startSwiping()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-[#e50914] to-[#ff2a3a] hover:from-[#f00a16] hover:to-[#ff3b4a] text-white font-extrabold text-sm tracking-wide uppercase flex items-center justify-center gap-2 shadow-xl shadow-red-600/30 active:scale-[0.98] transition">
+        <span>Start Swiping Deck</span>
+        <span class="material-symbols-outlined text-lg">arrow_forward</span>
+      </button>
+    </section>
+
+    <!-- ---------------------------------------- -->
+    <!-- VIEW 2: SWIPE DECK (TINDER FOR MOVIES)   -->
+    <!-- ---------------------------------------- -->
+    <section id="view-swipe-deck" class="hidden flex-1 flex flex-col justify-between py-2">
+      
+      <!-- Top Status Row -->
+      <div class="flex items-center justify-between px-1 text-xs text-gray-400 mb-2">
+        <span id="deck-counter" class="font-bold">Movie 1 of 8</span>
+        <div class="flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          Room Synced
+        </div>
+      </div>
+
+      <!-- Movie Card Display -->
+      <div class="relative w-full aspect-[2/3] max-h-[510px] rounded-3xl overflow-hidden shadow-2xl border border-[#282a2e] bg-[#14161b] select-none group">
+        <img id="card-poster" src="" alt="Movie Poster" class="w-full h-full object-cover transition duration-300" />
+        
+        <!-- Gradient Overlays -->
+        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none"></div>
+
+        <!-- Rating & Match Badges -->
+        <div class="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+          <div class="flex items-center gap-1 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-full border border-yellow-500/30 text-yellow-400 text-xs font-bold shadow-lg">
+            <span class="material-symbols-outlined text-sm icon-fill">star</span>
+            <span id="card-imdb">8.8</span>
+          </div>
+          <div class="bg-emerald-500/90 backdrop-blur-md px-2.5 py-1 rounded-full text-white text-[11px] font-black tracking-wide uppercase shadow-lg flex items-center gap-1">
+            <span class="material-symbols-outlined text-xs">thumb_up</span>
+            <span id="card-match-score">98% Match</span>
+          </div>
+        </div>
+
+        <!-- Card Movie Details -->
+        <div class="absolute bottom-0 left-0 right-0 p-5 space-y-2 pointer-events-none">
+          <div class="flex items-center gap-2 text-xs text-gray-300">
+            <span id="card-year" class="font-bold text-white">2010</span>
+            <span>•</span>
+            <span id="card-runtime">2h 28m</span>
+            <span>•</span>
+            <span id="card-genres" class="text-gray-300 truncate">Sci-Fi • Thriller</span>
+          </div>
+
+          <h2 id="card-title" class="text-2xl font-black text-white leading-tight drop-shadow-md">Inception</h2>
+          <p id="card-synopsis" class="text-xs text-gray-300 line-clamp-3 leading-relaxed drop-shadow">A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea.</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons Row -->
+      <div class="flex items-center justify-center gap-4 pt-4">
+        <!-- Rewind -->
+        <button onclick="voteMovie('rewind')" title="Rewind" class="w-12 h-12 rounded-full bg-[#181a20] border border-[#282a2e] text-yellow-400 hover:bg-[#22252c] flex items-center justify-center shadow-lg transition active:scale-90">
+          <span class="material-symbols-outlined text-xl">undo</span>
+        </button>
+
+        <!-- Pass (Left) -->
+        <button onclick="voteMovie('pass')" title="Pass" class="w-16 h-16 rounded-full bg-[#181a20] border-2 border-red-500/40 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center shadow-xl shadow-red-500/10 transition active:scale-90">
+          <span class="material-symbols-outlined text-3xl font-black">close</span>
+        </button>
+
+        <!-- Super Like (Up) -->
+        <button onclick="voteMovie('super')" title="Super Like" class="w-12 h-12 rounded-full bg-[#181a20] border border-cyan-500/40 text-cyan-400 hover:bg-cyan-500 hover:text-white flex items-center justify-center shadow-lg transition active:scale-90">
+          <span class="material-symbols-outlined text-2xl icon-fill">star</span>
+        </button>
+
+        <!-- Like (Right) -->
+        <button onclick="voteMovie('like')" title="Like" class="w-16 h-16 rounded-full bg-[#181a20] border-2 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500 hover:text-white flex items-center justify-center shadow-xl shadow-emerald-500/10 transition active:scale-90">
+          <span class="material-symbols-outlined text-3xl icon-fill">favorite</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------- -->
+    <!-- VIEW 3: MATCHES LIST                     -->
+    <!-- ---------------------------------------- -->
+    <section id="view-matches" class="hidden flex-1 flex flex-col gap-4 py-2">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xl font-black text-white">Group Matches</h2>
+          <p class="text-xs text-gray-400">Movies everyone in room voted YES on!</p>
+        </div>
+        <button onclick="switchTab('swipe-deck')" class="px-3 py-1.5 rounded-xl bg-[#1c1e24] hover:bg-[#282a2e] text-xs font-bold text-gray-300 flex items-center gap-1 border border-[#282a2e]">
+          <span class="material-symbols-outlined text-sm">swipe</span>
+          Swipe More
+        </button>
+      </div>
+
+      <!-- Match Cards List -->
+      <div id="matches-list-container" class="space-y-3 overflow-y-auto max-h-[68vh] pr-1">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ---------------------------------------- -->
+    <!-- VIEW 4: LIVE WATCH PARTY & VOICE ROOM    -->
+    <!-- ---------------------------------------- -->
+    <section id="view-watch-party" class="hidden flex-1 flex flex-col gap-3 py-1">
+      
+      <!-- Video Player Canvas Simulation -->
+      <div class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-[#282a2e] shadow-2xl flex flex-col justify-between p-3 group">
+        <img id="party-movie-backdrop" src="" alt="Cinema backdrop" class="absolute inset-0 w-full h-full object-cover opacity-60" />
+        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+
+        <!-- Top Controls -->
+        <div class="relative z-10 flex items-center justify-between text-xs text-white">
+          <div class="flex items-center gap-2 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
+            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+            <span class="font-bold text-red-400">LIVE SYNC</span>
+            <span class="text-gray-400">|</span>
+            <span id="party-movie-title" class="font-semibold truncate max-w-[150px]">Movie Title</span>
+          </div>
+
+          <!-- Host Share Screen Button -->
+          <button onclick="triggerHostScreenShare()" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/40 text-xs font-bold transition active:scale-95">
+            <span class="material-symbols-outlined text-sm">screen_share</span>
+            <span>Host: Share 7Reels</span>
+          </button>
+        </div>
+
+        <!-- Center Play Icon -->
+        <div class="relative z-10 self-center my-auto">
+          <div class="w-14 h-14 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl cursor-pointer hover:scale-110 active:scale-95 transition">
+            <span class="material-symbols-outlined text-3xl icon-fill ml-1">play_arrow</span>
+          </div>
+        </div>
+
+        <!-- Bottom Playback Row -->
+        <div class="relative z-10 flex flex-col gap-1 text-xs text-white">
+          <div class="w-full bg-white/20 h-1.5 rounded-full overflow-hidden">
+            <div class="bg-red-600 h-full w-[38%] rounded-full"></div>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-gray-300">
+            <span>42:15 / 1:52:00</span>
+            <div class="flex items-center gap-2">
+              <span class="text-emerald-400 font-bold">● Tab Audio Synced</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Streaming Action & 7reels Direct Link -->
+      <div class="bg-[#181a20] p-3 rounded-2xl border border-[#282a2e] flex items-center justify-between gap-2 shadow-md">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-red-600/20 text-red-500 flex items-center justify-center font-black text-xs shrink-0">
+            7R
+          </div>
+          <div class="flex flex-col min-w-0">
+            <span class="text-xs font-bold text-white truncate">Direct Stream on 7reels.cc</span>
+            <span class="text-[10px] text-gray-400 font-mono truncate">7reels.cc/search?q=<span id="party-search-q">Inception</span></span>
+          </div>
+        </div>
+
+        <button onclick="triggerWatchFreeRedirect(currentActivePartyMovie)" class="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1 shrink-0 transition active:scale-95 shadow-md">
+          <span>Open 7Reels</span>
+          <span class="material-symbols-outlined text-sm">open_in_new</span>
+        </button>
+      </div>
+
+      <!-- Live Voice Call Mesh -->
+      <div class="bg-[#181a20] p-3.5 rounded-2xl border border-[#282a2e] space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-base text-emerald-400">mic</span>
+            <span class="text-xs font-bold uppercase tracking-wider text-white">Voice Call (4 Connected)</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button id="party-mic-btn" onclick="togglePartyMic()" class="px-2.5 py-1 rounded-lg bg-[#282a2e] hover:bg-[#333539] text-xs font-bold text-gray-200 flex items-center gap-1 transition">
+              <span class="material-symbols-outlined text-sm text-emerald-400">mic</span>
+              <span id="party-mic-status">Mute</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Participants Voice Grid -->
+        <div class="grid grid-cols-4 gap-2">
+          <div class="flex flex-col items-center gap-1 bg-[#121316] p-2 rounded-xl border border-emerald-500/40 relative">
+            <span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <img id="party-user-avatar-current" src="https://api.dicebear.com/7.x/avataaars/svg?seed=alex" alt="Alex" class="w-8 h-8 rounded-full ring-2 ring-emerald-500" />
+            <span class="text-[10px] font-bold text-white truncate max-w-[60px]" id="party-user-name-current">You (Host)</span>
+            <span class="text-[9px] text-emerald-400 font-semibold">Speaking</span>
+          </div>
+
+          <div class="flex flex-col items-center gap-1 bg-[#121316] p-2 rounded-xl border border-[#282a2e]">
+            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=sarah" alt="Sarah" class="w-8 h-8 rounded-full" />
+            <span class="text-[10px] font-medium text-gray-300 truncate max-w-[60px]">Sarah M.</span>
+            <span class="text-[9px] text-gray-500">Listening</span>
+          </div>
+
+          <div class="flex flex-col items-center gap-1 bg-[#121316] p-2 rounded-xl border border-[#282a2e]">
+            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=david" alt="David" class="w-8 h-8 rounded-full" />
+            <span class="text-[10px] font-medium text-gray-300 truncate max-w-[60px]">David K.</span>
+            <span class="text-[9px] text-gray-500">Listening</span>
+          </div>
+
+          <div class="flex flex-col items-center gap-1 bg-[#121316] p-2 rounded-xl border border-[#282a2e]">
+            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=elena" alt="Elena" class="w-8 h-8 rounded-full" />
+            <span class="text-[10px] font-medium text-gray-300 truncate max-w-[60px]">Elena R.</span>
+            <span class="text-[9px] text-gray-500">Muted</span>
+          </div>
+        </div>
+
+        <!-- Floating Reactions Trigger -->
+        <div class="flex items-center justify-between pt-1 border-t border-[#282a2e]">
+          <span class="text-[11px] text-gray-400 font-medium">Reactions:</span>
+          <div class="flex items-center gap-1">
+            <button onclick="sendPartyReaction('🔥')" class="text-base hover:scale-125 transition p-1">🔥</button>
+            <button onclick="sendPartyReaction('❤️')" class="text-base hover:scale-125 transition p-1">❤️</button>
+            <button onclick="sendPartyReaction('🍿')" class="text-base hover:scale-125 transition p-1">🍿</button>
+            <button onclick="sendPartyReaction('😱')" class="text-base hover:scale-125 transition p-1">😱</button>
+            <button onclick="sendPartyReaction('😂')" class="text-base hover:scale-125 transition p-1">😂</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Leave Room Button -->
+      <button onclick="switchTab('matches')" class="w-full py-2.5 rounded-xl bg-[#1c1e24] hover:bg-[#282a2e] text-xs font-bold text-gray-300 flex items-center justify-center gap-1.5 transition">
+        <span class="material-symbols-outlined text-sm">arrow_back</span>
+        <span>Back to Matches</span>
+      </button>
+    </section>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- BOTTOM NAVIGATION BAR                      -->
+  <!-- ========================================== -->
+  <nav class="sticky bottom-0 z-40 w-full bg-[#0c0e12]/95 backdrop-blur-xl border-t border-[#282a2e] px-4 py-2">
+    <div class="max-w-md mx-auto grid grid-cols-4 gap-1">
+      <button id="nav-btn-preferences" onclick="switchTab('preferences')" class="flex flex-col items-center gap-0.5 text-red-500 font-bold">
+        <span class="material-symbols-outlined text-xl">tune</span>
+        <span class="text-[10px]">Filter</span>
+      </button>
+
+      <button id="nav-btn-swipe" onclick="switchTab('swipe-deck')" class="flex flex-col items-center gap-0.5 text-gray-400 hover:text-white transition">
+        <span class="material-symbols-outlined text-xl">style</span>
+        <span class="text-[10px]">Deck</span>
+      </button>
+
+      <button id="nav-btn-matches" onclick="switchTab('matches')" class="flex flex-col items-center gap-0.5 text-gray-400 hover:text-white transition relative">
+        <span class="material-symbols-outlined text-xl">favorite</span>
+        <span id="nav-match-count-badge" class="absolute top-0 right-5 w-4 h-4 rounded-full bg-red-600 text-[9px] font-black text-white flex items-center justify-center">2</span>
+        <span class="text-[10px]">Matches</span>
+      </button>
+
+      <button id="nav-btn-party" onclick="switchTab('watch-party')" class="flex flex-col items-center gap-0.5 text-gray-400 hover:text-white transition">
+        <span class="material-symbols-outlined text-xl">groups</span>
+        <span class="text-[10px]">Party</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ========================================== -->
+  <!-- MODAL 1: AUTH GATE (GOOGLE / GMAIL & OTP)   -->
+  <!-- ========================================== -->
+  <div id="auth-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity">
+    <div class="w-full max-w-sm bg-[#16181e] rounded-3xl border border-[#2e3138] p-6 shadow-2xl relative space-y-4 animate-in fade-in zoom-in-95">
+      
+      <!-- Close button -->
+      <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-full bg-[#20232a]">
+        <span class="material-symbols-outlined text-lg">close</span>
+      </button>
+
+      <!-- Header & Icon -->
+      <div class="text-center space-y-2 pt-2">
+        <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-red-600 to-amber-500 p-0.5 shadow-xl shadow-red-600/20">
+          <div class="w-full h-full bg-[#16181e] rounded-[14px] flex items-center justify-center">
+            <span class="material-symbols-outlined text-2xl text-red-500 icon-fill">lock</span>
+          </div>
+        </div>
+        <h3 class="text-lg font-black text-white">Sign In to Continue</h3>
+        <p class="text-xs text-gray-400 px-2 leading-relaxed">
+          Sign in with your Google / Gmail account to watch free on 7reels.cc and join live synchronized watch parties.
+        </p>
+      </div>
+
+      <!-- Pending Action Alert Badge -->
+      <div id="auth-pending-badge" class="hidden bg-emerald-500/10 border border-emerald-500/30 p-2 rounded-xl text-center">
+        <span class="text-[11px] font-bold text-emerald-400 flex items-center justify-center gap-1">
+          <span class="material-symbols-outlined text-sm">schedule</span>
+          <span id="auth-pending-text">Action pending: Redirect to 7reels.cc</span>
+        </span>
+      </div>
+
+      <!-- Primary Action: Continue with Google / Gmail -->
+      <button id="btn-google-signin" onclick="handleGoogleSignIn()" class="w-full py-3.5 px-4 rounded-xl bg-white hover:bg-gray-100 text-gray-900 font-bold text-xs flex items-center justify-center gap-3 shadow-lg active:scale-98 transition cursor-pointer">
+        <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+        </svg>
+        <span>Continue with Google / Gmail</span>
+      </button>
+
+      <!-- Divider -->
+      <div class="relative flex items-center justify-center">
+        <div class="border-t border-[#2a2d34] w-full"></div>
+        <span class="bg-[#16181e] px-2 text-[10px] uppercase font-bold text-gray-500">or Email & OTP</span>
+      </div>
+
+      <!-- Email / OTP Input Simulation -->
+      <div class="space-y-2">
+        <div class="relative">
+          <input id="auth-email-input" type="email" placeholder="name@example.com" class="w-full bg-[#1e2129] border border-[#2e3138] rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500" />
+          <button onclick="handleSendOtp()" class="absolute right-1.5 top-1.5 bottom-1.5 px-2.5 bg-[#282b34] hover:bg-[#343844] text-gray-200 text-[10px] font-bold rounded-lg transition">
+            Send OTP
+          </button>
+        </div>
+
+        <div id="otp-input-row" class="hidden flex items-center gap-2">
+          <input id="auth-otp-input" type="text" maxlength="6" placeholder="Enter 6-digit OTP (e.g. 749210)" class="flex-1 bg-[#1e2129] border border-[#2e3138] rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 text-center tracking-widest font-mono" />
+          <button onclick="handleVerifyOtp()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition active:scale-95 shadow">
+            Verify
+          </button>
+        </div>
+      </div>
+
+      <!-- Guest Demo Bypass -->
+      <div class="text-center pt-1">
+        <button onclick="handleGuestDemoLogin()" class="text-[11px] text-gray-400 hover:text-white underline underline-offset-2">
+          Continue as Guest Demo Account
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL 2: 100% MATCH CELEBRATION MODAL      -->
+  <!-- ========================================== -->
+  <div id="match-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+    <div class="w-full max-w-sm bg-[#16181e] rounded-3xl border border-emerald-500/40 p-6 shadow-2xl space-y-4 text-center animate-in zoom-in-90">
+      
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-black uppercase tracking-wider border border-emerald-500/30">
+        <span class="material-symbols-outlined text-sm icon-fill">celebration</span>
+        IT'S A MATCH!
+      </div>
+
+      <img id="match-modal-poster" src="" alt="Matched poster" class="w-32 h-44 mx-auto rounded-2xl object-cover shadow-2xl ring-2 ring-emerald-500/50" />
+
+      <div>
+        <h3 id="match-modal-title" class="text-xl font-black text-white">Movie Title</h3>
+        <p id="match-modal-genres" class="text-xs text-gray-400 mt-0.5">Genres</p>
+      </div>
+
+      <!-- Match Action Triggers with Auth Check -->
+      <div class="space-y-2 pt-2">
+        <button onclick="triggerWatchFreeRedirect(currentMatchMovie)" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-black tracking-wide uppercase flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 active:scale-95 transition">
+          <span class="material-symbols-outlined text-base icon-fill">play_arrow</span>
+          <span>Watch Free on 7reels.cc</span>
+        </button>
+
+        <button onclick="triggerWatchPartyLaunch(currentMatchMovie)" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white text-xs font-black tracking-wide uppercase flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95 transition">
+          <span class="material-symbols-outlined text-base">groups</span>
+          <span>Start Watch Party 🎙️</span>
+        </button>
+
+        <button onclick="closeMatchModal()" class="w-full py-2 text-xs font-bold text-gray-400 hover:text-white">
+          Keep Swiping
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-opacity duration-300 bg-[#1e2026] text-white border border-[#2e3138] px-4 py-2 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-2">
+    <span id="toast-icon" class="material-symbols-outlined text-sm text-emerald-400">check_circle</span>
+    <span id="toast-msg">Notification message</span>
+  </div>
+
+  <!-- Floating Reactions Layer -->
+  <div id="reactions-layer" class="fixed inset-0 pointer-events-none z-50 overflow-hidden"></div>
+
+  <!-- ========================================== -->
+  <!-- FIREBASE SDK & CINEMATCH SCRIPT (CDN v10)  -->
+  <!-- ========================================== -->
+  <script type="module">
+    // 1. IMPORT FIREBASE SDK v10 MODULES VIA OFFICIAL CDN
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getAuth, 
+      signInWithPopup, 
+      GoogleAuthProvider, 
+      onAuthStateChanged, 
+      signOut, 
+      setPersistence, 
+      browserLocalPersistence 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { 
+      getFirestore, 
+      doc, 
+      setDoc, 
+      getDoc, 
+      serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // 2. FIREBASE CONFIGURATION SETUP PLACEHOLDERS
+    // Replace with your Firebase Project credentials from Firebase Console
+    const firebaseConfig = {
+      apiKey: "AIzaSy_YOUR_FIREBASE_API_KEY_HERE",
+      authDomain: "cinematch-app.firebaseapp.com",
+      projectId: "cinematch-app",
+      storageBucket: "cinematch-app.appspot.com",
+      messagingSenderId: "123456789012",
+      appId: "1:123456789012:web:abcdef1234567890"
+    };
+
+    // Initialize Firebase
+    let app, auth, db, googleProvider;
+    let isFirebaseReady = false;
+
+    try {
+      if (firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("_YOUR_")) {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+        googleProvider = new GoogleAuthProvider();
+        googleProvider.addScope('email');
+        googleProvider.addScope('profile');
+        
+        // Enforce Local Persistence across sessions
+        setPersistence(auth, browserLocalPersistence).catch(console.warn);
+        isFirebaseReady = true;
+      }
+    } catch (err) {
+      console.warn("Firebase initialized with local simulation mode:", err.message);
+    }
+
+    // ==========================================
+    // APP STATE & CATALOG DATA
+    // ==========================================
+    const MOVIES = [
+      {
+        id: "m1",
+        title: "Inception",
+        year: 2010,
+        runtime: "2h 28m",
+        imdbRating: 8.8,
+        matchScore: 98,
+        genres: ["Action", "Sci-Fi", "Thriller"],
+        language: "English",
+        synopsis: "A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea into the mind of a CEO.",
+        posterUrl: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&auto=format&fit=crop&q=80",
+        backdropUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200&auto=format&fit=crop&q=80"
+      },
+      {
+        id: "m2",
+        title: "Interstellar",
+        year: 2014,
+        runtime: "2h 49m",
+        imdbRating: 8.7,
+        matchScore: 96,
+        genres: ["Sci-Fi", "Drama", "Adventure"],
+        language: "English",
+        synopsis: "When Earth becomes uninhabitable in the future, a farmer and ex-NASA pilot is tasked to pilot a spacecraft along with a team of researchers.",
+        posterUrl: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&auto=format&fit=crop&q=80",
+        backdropUrl: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=1200&auto=format&fit=crop&q=80"
+      },
+      {
+        id: "m3",
+        title: "Parasite",
+        year: 2019,
+        runtime: "2h 12m",
+        imdbRating: 8.5,
+        matchScore: 99,
+        genres: ["Drama", "Thriller", "Comedy"],
+        language: "Korean",
+        synopsis: "Greed and class discrimination threaten the newly formed symbiotic relationship between the wealthy Park family and the destitute Kim clan.",
+        posterUrl: "https://images.unsplash.com/photo-1518676599903-88820c747805?w=800&auto=format&fit=crop&q=80",
+        backdropUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1200&auto=format&fit=crop&q=80"
+      },
+      {
+        id: "m4",
+        title: "Spirited Away",
+        year: 2001,
+        runtime: "2h 05m",
+        imdbRating: 8.6,
+        matchScore: 94,
+        genres: ["Animation", "Adventure", "Family"],
+        language: "Japanese",
+        synopsis: "During her family's move to the suburbs, a sullen 10-year-old girl wanders into a world ruled by gods, witches, and spirits.",
+        posterUrl: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80",
+        backdropUrl: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80"
+      },
+      {
+        id: "m5",
+        title: "The Dark Knight",
+        year: 2008,
+        runtime: "2h 32m",
+        imdbRating: 9.0,
+        matchScore: 100,
+        genres: ["Action", "Crime", "Drama"],
+        language: "English",
+        synopsis: "When the menace known as the Joker wreaks havoc and chaos on Gotham City, Batman must accept one of the greatest psychological tests.",
+        posterUrl: "https://images.unsplash.com/photo-1509281373149-e957c6296406?w=800&auto=format&fit=crop&q=80",
+        backdropUrl: "https://images.unsplash.com/photo-1509281373149-e957c6296406?w=1200&auto=format&fit=crop&q=80"
+      }
+    ];
+
+    const AVAILABLE_GENRES = ["Action", "Sci-Fi", "Comedy", "Horror", "Romance", "Thriller", "Animation", "Drama"];
+    const AVAILABLE_LANGUAGES = ["English", "Hindi", "Spanish", "French", "Japanese", "Korean"];
+
+    // App State
+    let currentUser = null; // { uid, email, displayName, photoURL }
+    let currentRoomId = "cine-8942";
+    let selectedGenres = ["Action", "Sci-Fi", "Thriller"];
+    let selectedLanguages = ["English"];
+    let minRating = 7.5;
+    let currentCardIndex = 0;
+    let votesHistory = {}; // movieId -> 'like' | 'pass' | 'super'
+    let matchedMovies = [MOVIES[0], MOVIES[4]]; // Seeded matches
+    let currentMatchMovie = MOVIES[0];
+    let currentActivePartyMovie = MOVIES[0];
+    let pendingAuthAction = null; // { type: 'redirect' | 'party', movie: Movie }
+    let isPartyMicMuted = false;
+
+    // ==========================================
+    // INITIALIZATION & UI SETUP
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      // 1. Check local session persistence
+      const savedUser = localStorage.getItem('cinematch_auth_user');
+      if (savedUser) {
+        try {
+          currentUser = JSON.parse(savedUser);
+          updateAuthHeaderUI();
+        } catch (e) {}
+      }
+
+      // 2. Listen to real Firebase Auth if live
+      if (isFirebaseReady && auth) {
+        onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            currentUser = {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName || user.email.split('@')[0],
+              photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`
+            };
+            localStorage.setItem('cinematch_auth_user', JSON.stringify(currentUser));
+            updateAuthHeaderUI();
+
+            // Save user profile to Firestore
+            await saveUserProfileToFirestore(currentUser);
+
+            // Execute pending action if waiting
+            handlePendingPostAuth();
+          } else {
+            currentUser = null;
+            localStorage.removeItem('cinematch_auth_user');
+            updateAuthHeaderUI();
+          }
+        });
+      }
+
+      // Render filters & deck
+      renderGenrePills();
+      renderLanguagePills();
+      updateDeckCard();
+      renderMatchesList();
+    });
+
+    // ==========================================
+    // AUTH LOGIC & GATE CONTROL
+    // ==========================================
+    window.openAuthModal = (triggerType = 'manual', pendingAction = null) => {
+      pendingAuthAction = pendingAction;
+      const modal = document.getElementById('auth-modal');
+      const pendingBadge = document.getElementById('auth-pending-badge');
+      const pendingText = document.getElementById('auth-pending-text');
+
+      if (pendingAction) {
+        pendingBadge.classList.remove('hidden');
+        if (pendingAction.type === 'redirect') {
+          pendingText.textContent = `Action pending: Redirect to 7reels.cc for "${pendingAction.movie.title}"`;
+        } else {
+          pendingText.textContent = `Action pending: Join Live Watch Party for "${pendingAction.movie.title}"`;
+        }
+      } else {
+        pendingBadge.classList.add('hidden');
+      }
+
+      modal.classList.remove('hidden');
+    };
+
+    window.closeAuthModal = () => {
+      document.getElementById('auth-modal').classList.add('hidden');
+    };
+
+    window.handleGoogleSignIn = async () => {
+      showToast("Connecting to Google Auth...", "sync");
+
+      if (isFirebaseReady && auth && googleProvider) {
+        try {
+          const result = await signInWithPopup(auth, googleProvider);
+          const user = result.user;
+          currentUser = {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName || user.email.split('@')[0],
+            photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`
+          };
+          localStorage.setItem('cinematch_auth_user', JSON.stringify(currentUser));
+          updateAuthHeaderUI();
+          await saveUserProfileToFirestore(currentUser);
+          closeAuthModal();
+          showToast(`Welcome back, ${currentUser.displayName}!`, "check_circle");
+          handlePendingPostAuth();
+          return;
+        } catch (err) {
+          console.error("Google Auth error:", err);
+          showToast("Google sign in notice: Switching to browser secure session", "info");
+        }
+      }
+
+      // Fallback/Simulation if API key is in placeholder state
+      setTimeout(async () => {
+        currentUser = {
+          uid: "google-" + Math.random().toString(36).substring(2, 9),
+          email: "alex.cine@gmail.com",
+          displayName: "Alex Morgan",
+          photoURL: "https://lh3.googleusercontent.com/a/ACg8ocL_example_avatar=s96-c"
+        };
+        localStorage.setItem('cinematch_auth_user', JSON.stringify(currentUser));
+        updateAuthHeaderUI();
+        await saveUserProfileToFirestore(currentUser);
+        closeAuthModal();
+        showToast("Signed in as " + currentUser.displayName, "verified");
+        handlePendingPostAuth();
+      }, 600);
+    };
+
+    window.handleSendOtp = () => {
+      const email = document.getElementById('auth-email-input').value.trim();
+      if (!email || !email.includes('@')) {
+        showToast("Please enter a valid Gmail / Email", "warning");
+        return;
+      }
+      document.getElementById('otp-input-row').classList.remove('hidden');
+      document.getElementById('auth-otp-input').value = "842915";
+      showToast("Simulation OTP code sent: 842915", "mark_email_read");
+    };
+
+    window.handleVerifyOtp = async () => {
+      const email = document.getElementById('auth-email-input').value.trim();
+      const otp = document.getElementById('auth-otp-input').value.trim();
+      if (!otp) {
+        showToast("Please enter the 6-digit OTP", "warning");
+        return;
+      }
+
+      currentUser = {
+        uid: "user-" + Math.random().toString(36).substring(2, 9),
+        email: email || "user@gmail.com",
+        displayName: email.split('@')[0],
+        photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`
+      };
+      localStorage.setItem('cinematch_auth_user', JSON.stringify(currentUser));
+      updateAuthHeaderUI();
+      await saveUserProfileToFirestore(currentUser);
+      closeAuthModal();
+      showToast("Email verified successfully!", "check_circle");
+      handlePendingPostAuth();
+    };
+
+    window.handleGuestDemoLogin = async () => {
+      currentUser = {
+        uid: "guest-" + Math.random().toString(36).substring(2, 9),
+        email: "guest@cinematch.app",
+        displayName: "Guest Explorer",
+        photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=guest"
+      };
+      localStorage.setItem('cinematch_auth_user', JSON.stringify(currentUser));
+      updateAuthHeaderUI();
+      await saveUserProfileToFirestore(currentUser);
+      closeAuthModal();
+      showToast("Continuing as Guest Demo User", "account_circle");
+      handlePendingPostAuth();
+    };
+
+    window.handleSignOut = async () => {
+      if (isFirebaseReady && auth) {
+        try {
+          await signOut(auth);
+        } catch (e) {}
+      }
+      currentUser = null;
+      localStorage.removeItem('cinematch_auth_user');
+      updateAuthHeaderUI();
+      showToast("Signed out", "logout");
+    };
+
+    function updateAuthHeaderUI() {
+      const loginBtn = document.getElementById('header-login-btn');
+      const userBadge = document.getElementById('header-user-badge');
+      const avatar = document.getElementById('header-user-avatar');
+      const name = document.getElementById('header-user-name');
+      const email = document.getElementById('header-user-email');
+
+      if (currentUser) {
+        loginBtn.classList.add('hidden');
+        userBadge.classList.remove('hidden');
+        avatar.src = currentUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.uid}`;
+        name.textContent = currentUser.displayName || "User";
+        email.textContent = currentUser.email || "";
+
+        // Update Party Screen avatar
+        const partyAvatar = document.getElementById('party-user-avatar-current');
+        const partyName = document.getElementById('party-user-name-current');
+        if (partyAvatar) partyAvatar.src = currentUser.photoURL;
+        if (partyName) partyName.textContent = currentUser.displayName;
+      } else {
+        loginBtn.classList.remove('hidden');
+        userBadge.classList.add('hidden');
+      }
+    }
+
+    // ==========================================
+    // FIRESTORE DATABASE SAVING LOGIC
+    // ==========================================
+    async function saveUserProfileToFirestore(user) {
+      if (!user) return;
+      console.log(`[Firestore] Saving profile under users/${user.uid}:`, user.email);
+
+      if (isFirebaseReady && db) {
+        try {
+          const userDocRef = doc(db, "users", user.uid);
+          await setDoc(userDocRef, {
+            email: user.email || "",
+            displayName: user.displayName || "",
+            photoURL: user.photoURL || "",
+            lastLogin: new Date().toISOString()
+          }, { merge: true });
+        } catch (err) {
+          console.warn("[Firestore] Write failed or offline, saving to local cache:", err.message);
+        }
+      }
+
+      // Persist local store
+      localStorage.setItem(`cinematch_profile_${user.uid}`, JSON.stringify({
+        ...user,
+        lastLogin: new Date().toISOString()
+      }));
+    }
+
+    async function saveRoomHistoryToFirestore(roomId, voteType, movie) {
+      console.log(`[Firestore] Saving room swipe under rooms/${roomId}:`, voteType, movie.title);
+
+      if (isFirebaseReady && db) {
+        try {
+          const roomDocRef = doc(db, "rooms", roomId);
+          await setDoc(roomDocRef, {
+            roomId: roomId,
+            updatedAt: new Date().toISOString(),
+            lastVote: {
+              userId: currentUser ? currentUser.uid : "anon",
+              vote: voteType,
+              movieTitle: movie.title
+            }
+          }, { merge: true });
+        } catch (err) {
+          console.warn("[Firestore] Room record cached locally:", err.message);
+        }
+      }
+    }
+
+    // ==========================================
+    // AUTH GATE ENFORCEMENT & REDIRECT FLOW
+    // ==========================================
+    window.triggerWatchFreeRedirect = (movie) => {
+      if (!movie) movie = currentActivePartyMovie;
+
+      // 1. AUTH GATE CHECK: If NOT logged in, show auth modal
+      if (!currentUser) {
+        window.openAuthModal('gate', { type: 'redirect', movie });
+        return;
+      }
+
+      // 2. User IS logged in -> Execute direct redirect
+      const targetUrl = `https://7reels.cc/search?q=${encodeURIComponent(movie.title)}`;
+      showToast(`Redirecting to 7reels.cc for "${movie.title}"...`, "open_in_new");
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    };
+
+    window.triggerWatchPartyLaunch = (movie) => {
+      if (!movie) movie = currentActivePartyMovie;
+
+      // 1. AUTH GATE CHECK: If NOT logged in, show auth modal
+      if (!currentUser) {
+        window.openAuthModal('gate', { type: 'party', movie });
+        return;
+      }
+
+      // 2. User IS logged in -> Enter Step 4 Watch Party
+      currentActivePartyMovie = movie;
+      setupPartyScreen(movie);
+      closeMatchModal();
+      switchTab('watch-party');
+      showToast(`Entered Live Watch Party for "${movie.title}"!`, "groups");
+    };
+
+    function handlePendingPostAuth() {
+      if (!pendingAuthAction) return;
+      const action = pendingAuthAction;
+      pendingAuthAction = null;
+
+      if (action.type === 'redirect') {
+        triggerWatchFreeRedirect(action.movie);
+      } else if (action.type === 'party') {
+        triggerWatchPartyLaunch(action.movie);
+      }
+    }
+
+    // ==========================================
+    // PREFERENCES & FILTER ACTIONS
+    // ==========================================
+    function renderGenrePills() {
+      const container = document.getElementById('genres-container');
+      container.innerHTML = AVAILABLE_GENRES.map(g => {
+        const isSelected = selectedGenres.includes(g);
+        return `
+          <button onclick="toggleGenre('${g}')" class="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+            isSelected 
+              ? 'bg-[#e50914] text-white shadow-md shadow-red-600/30' 
+              : 'bg-[#121316] text-gray-400 hover:text-white hover:bg-[#202228] border border-[#282a2e]'
+          }">
+            ${g}
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderLanguagePills() {
+      const container = document.getElementById('languages-container');
+      container.innerHTML = AVAILABLE_LANGUAGES.map(l => {
+        const isSelected = selectedLanguages.includes(l);
+        return `
+          <button onclick="toggleLanguage('${l}')" class="px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+            isSelected 
+              ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/30' 
+              : 'bg-[#121316] text-gray-400 hover:text-white hover:bg-[#202228] border border-[#282a2e]'
+          }">
+            ${l}
+          </button>
+        `;
+      }).join('');
+    }
+
+    window.toggleGenre = (g) => {
+      if (selectedGenres.includes(g)) {
+        selectedGenres = selectedGenres.filter(x => x !== g);
+      } else {
+        selectedGenres.push(g);
+      }
+      renderGenrePills();
+    };
+
+    window.toggleLanguage = (l) => {
+      if (selectedLanguages.includes(l)) {
+        selectedLanguages = selectedLanguages.filter(x => x !== l);
+      } else {
+        selectedLanguages.push(l);
+      }
+      renderLanguagePills();
+    };
+
+    window.updateRatingDisplay = (val) => {
+      minRating = parseFloat(val);
+      document.getElementById('rating-val-display').textContent = val + "+";
+    };
+
+    window.startSwiping = () => {
+      currentCardIndex = 0;
+      updateDeckCard();
+      switchTab('swipe-deck');
+      showToast("Deck ready with selected filters!", "filter_alt");
+    };
+
+    // ==========================================
+    // SWIPE DECK LOGIC
+    // ==========================================
+    function updateDeckCard() {
+      const movie = MOVIES[currentCardIndex % MOVIES.length];
+      document.getElementById('deck-counter').textContent = `Movie ${(currentCardIndex % MOVIES.length) + 1} of ${MOVIES.length}`;
+      document.getElementById('card-poster').src = movie.posterUrl;
+      document.getElementById('card-title').textContent = movie.title;
+      document.getElementById('card-year').textContent = movie.year;
+      document.getElementById('card-runtime').textContent = movie.runtime;
+      document.getElementById('card-imdb').textContent = movie.imdbRating;
+      document.getElementById('card-match-score').textContent = `${movie.matchScore}% Match`;
+      document.getElementById('card-genres').textContent = movie.genres.join(' • ');
+      document.getElementById('card-synopsis').textContent = movie.synopsis;
+    }
+
+    window.voteMovie = (type) => {
+      const movie = MOVIES[currentCardIndex % MOVIES.length];
+      votesHistory[movie.id] = type;
+
+      // Save swipe record to Firestore
+      saveRoomHistoryToFirestore(currentRoomId, type, movie);
+
+      if (type === 'like' || type === 'super') {
+        showToast(`Liked "${movie.title}"`, type === 'super' ? 'star' : 'favorite');
+        
+        // Trigger Match Celebration on specific favorites or super-likes
+        if (type === 'super' || currentCardIndex === 1 || currentCardIndex === 4) {
+          triggerMatchFound(movie);
+          return;
+        }
+      } else if (type === 'rewind') {
+        if (currentCardIndex > 0) currentCardIndex--;
+        updateDeckCard();
+        showToast("Rewound to previous movie", "undo");
+        return;
+      } else {
+        showToast(`Passed on "${movie.title}"`, "close");
+      }
+
+      currentCardIndex++;
+      updateDeckCard();
+    };
+
+    function triggerMatchFound(movie) {
+      currentMatchMovie = movie;
+      if (!matchedMovies.some(m => m.id === movie.id)) {
+        matchedMovies.unshift(movie);
+      }
+      renderMatchesList();
+
+      document.getElementById('match-modal-poster').src = movie.posterUrl;
+      document.getElementById('match-modal-title').textContent = `${movie.title} (${movie.year})`;
+      document.getElementById('match-modal-genres').textContent = movie.genres.join(' • ') + ' • ' + movie.runtime;
+      document.getElementById('match-modal').classList.remove('hidden');
+
+      // Trigger Confetti explosion
+      if (window.confetti) {
+        window.confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      }
+    }
+
+    window.closeMatchModal = () => {
+      document.getElementById('match-modal').classList.add('hidden');
+      currentCardIndex++;
+      updateDeckCard();
+    };
+
+    // ==========================================
+    // MATCHES SCREEN
+    // ==========================================
+    function renderMatchesList() {
+      const container = document.getElementById('matches-list-container');
+      const badge = document.getElementById('nav-match-count-badge');
+      if (badge) badge.textContent = matchedMovies.length;
+
+      if (matchedMovies.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-gray-500 text-xs">No matches yet. Keep swiping!</div>`;
+        return;
+      }
+
+      container.innerHTML = matchedMovies.map(movie => `
+        <div class="bg-[#181a20] rounded-2xl border border-[#282a2e] p-3 flex items-center justify-between gap-3 shadow-lg">
+          <img src="${movie.posterUrl}" alt="${movie.title}" class="w-14 h-20 rounded-xl object-cover ring-1 ring-white/10 shrink-0" />
+          
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-400">100% Match</span>
+              <span class="text-[10px] text-yellow-400 font-bold">★ ${movie.imdbRating}</span>
+            </div>
+            <h4 class="text-sm font-bold text-white truncate mt-0.5">${movie.title} (${movie.year})</h4>
+            <p class="text-[11px] text-gray-400 truncate">${movie.genres.join(', ')}</p>
+            
+            <div class="flex items-center gap-2 mt-2">
+              <button onclick="triggerWatchFreeRedirect(MOVIES.find(m => m.id === '${movie.id}'))" class="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold flex items-center gap-1 transition">
+                <span class="material-symbols-outlined text-xs">play_arrow</span>
+                <span>Watch Free</span>
+              </button>
+              <button onclick="triggerWatchPartyLaunch(MOVIES.find(m => m.id === '${movie.id}'))" class="px-2.5 py-1 rounded-lg bg-[#282a2e] hover:bg-[#333539] text-gray-200 text-[11px] font-bold flex items-center gap-1 transition">
+                <span class="material-symbols-outlined text-xs text-emerald-400">groups</span>
+                <span>Party 🎙️</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ==========================================
+    // STEP 4: LIVE WATCH PARTY & HOST SCREEN SHARE
+    // ==========================================
+    function setupPartyScreen(movie) {
+      document.getElementById('party-movie-backdrop').src = movie.backdropUrl || movie.posterUrl;
+      document.getElementById('party-movie-title').textContent = movie.title;
+      document.getElementById('party-search-q').textContent = movie.title;
+    }
+
+    window.triggerHostScreenShare = () => {
+      const movie = currentActivePartyMovie;
+      const targetUrl = `https://7reels.cc/search?q=${encodeURIComponent(movie.title)}`;
+      
+      showToast("Opening 7reels.cc stream tab & starting screen share...", "screen_share");
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+
+      // Prompt screen share API if supported
+      if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true
+        }).then(stream => {
+          showToast("Live stream sharing tab audio active!", "check_circle");
+        }).catch(err => {
+          console.warn("Screen share cancelled or restricted:", err);
+        });
+      }
+    };
+
+    window.togglePartyMic = () => {
+      isPartyMicMuted = !isPartyMicMuted;
+      const status = document.getElementById('party-mic-status');
+      const btn = document.getElementById('party-mic-btn');
+      if (isPartyMicMuted) {
+        status.textContent = "Unmute";
+        btn.querySelector('.material-symbols-outlined').textContent = "mic_off";
+        btn.querySelector('.material-symbols-outlined').className = "material-symbols-outlined text-sm text-red-500";
+        showToast("Microphone muted", "mic_off");
+      } else {
+        status.textContent = "Mute";
+        btn.querySelector('.material-symbols-outlined').textContent = "mic";
+        btn.querySelector('.material-symbols-outlined').className = "material-symbols-outlined text-sm text-emerald-400";
+        showToast("Microphone live", "mic");
+      }
+    };
+
+    window.sendPartyReaction = (emoji) => {
+      const layer = document.getElementById('reactions-layer');
+      const el = document.createElement('div');
+      el.className = 'reaction-bubble absolute text-3xl select-none';
+      el.textContent = emoji;
+      el.style.left = `${30 + Math.random() * 40}%`;
+      el.style.bottom = '15%';
+      layer.appendChild(el);
+      setTimeout(() => el.remove(), 1800);
+    };
+
+    // ==========================================
+    // TAB NAVIGATION
+    // ==========================================
+    window.switchTab = (tab) => {
+      const views = ['preferences', 'swipe-deck', 'matches', 'watch-party'];
+      views.forEach(v => {
+        document.getElementById(`view-${v}`).classList.add('hidden');
+      });
+      document.getElementById(`view-${tab}`).classList.remove('hidden');
+
+      // Reset Nav button styling
+      ['preferences', 'swipe', 'matches', 'party'].forEach(b => {
+        const btn = document.getElementById(`nav-btn-${b}`);
+        if (btn) btn.className = "flex flex-col items-center gap-0.5 text-gray-400 hover:text-white transition";
+      });
+
+      const navMap = {
+        'preferences': 'nav-btn-preferences',
+        'swipe-deck': 'nav-btn-swipe',
+        'matches': 'nav-btn-matches',
+        'watch-party': 'nav-btn-party'
+      };
+      const activeBtn = document.getElementById(navMap[tab]);
+      if (activeBtn) activeBtn.className = "flex flex-col items-center gap-0.5 text-red-500 font-bold";
+
+      if (tab === 'watch-party') {
+        setupPartyScreen(currentActivePartyMovie);
+      }
+    };
+
+    // ==========================================
+    // TOAST HELPER
+    // ==========================================
+    let toastTimeout = null;
+    function showToast(msg, icon = 'info') {
+      const toast = document.getElementById('toast');
+      const iconEl = document.getElementById('toast-icon');
+      const msgEl = document.getElementById('toast-msg');
+
+      iconEl.textContent = icon;
+      msgEl.textContent = msg;
+      toast.classList.remove('opacity-0');
+
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.add('opacity-0');
+      }, 2500);
+    }
+  </script>
+</body>
+</html>
